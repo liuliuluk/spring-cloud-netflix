@@ -19,7 +19,6 @@ package org.springframework.cloud.netflix.ribbon.support;
 
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.loadbalancer.ServiceInstanceChooser;
-import org.springframework.cloud.netflix.ribbon.DefaultServerIntrospector;
 import org.springframework.cloud.netflix.ribbon.RibbonLoadBalancerClient;
 import org.springframework.cloud.netflix.ribbon.RibbonProperties;
 import org.springframework.cloud.netflix.ribbon.ServerIntrospector;
@@ -28,14 +27,13 @@ import com.netflix.client.ClientException;
 import com.netflix.client.IResponse;
 import com.netflix.client.RequestSpecificRetryHandler;
 import com.netflix.client.RetryHandler;
-import com.netflix.client.config.DefaultClientConfigImpl;
 import com.netflix.client.config.IClientConfig;
-import com.netflix.loadbalancer.ILoadBalancer;
 import com.netflix.loadbalancer.Server;
 import com.netflix.loadbalancer.reactive.LoadBalancerCommand;
 
 import static org.springframework.cloud.netflix.ribbon.RibbonClientConfiguration.DEFAULT_CONNECT_TIMEOUT;
 import static org.springframework.cloud.netflix.ribbon.RibbonClientConfiguration.DEFAULT_READ_TIMEOUT;
+import static org.springframework.cloud.netflix.ribbon.RibbonClientConfiguration.DEFAULT_GZIP_PAYLOAD;;
 
 /**
  * @author Spencer Gibb
@@ -51,6 +49,8 @@ public abstract class AbstractLoadBalancingClient<S extends ContextAwareRequest,
 
 	protected boolean followRedirects;
 
+	protected boolean gzipPayload;
+
 	protected boolean okToRetryOnAllOperations;
 
 	protected final D delegate;
@@ -59,26 +59,6 @@ public abstract class AbstractLoadBalancingClient<S extends ContextAwareRequest,
 	
 	public boolean isClientRetryable(ContextAwareRequest request) {
 		return false;
-	}
-	
-	@Deprecated
-	public AbstractLoadBalancingClient() {
-		super(null);
-		this.config = new DefaultClientConfigImpl();
-		this.delegate = createDelegate(this.config);
-		this.serverIntrospector = new DefaultServerIntrospector();
-		this.setRetryHandler(RetryHandler.DEFAULT);
-		initWithNiwsConfig(config);
-	}
-
-	@Deprecated
-	public AbstractLoadBalancingClient(final ILoadBalancer lb) {
-		super(lb);
-		this.config = new DefaultClientConfigImpl();
-		this.delegate = createDelegate(config);
-		this.serverIntrospector = new DefaultServerIntrospector();
-		this.setRetryHandler(RetryHandler.DEFAULT);
-		initWithNiwsConfig(config);
 	}
 
 	protected AbstractLoadBalancingClient(IClientConfig config, ServerIntrospector serverIntrospector) {
@@ -108,6 +88,7 @@ public abstract class AbstractLoadBalancingClient<S extends ContextAwareRequest,
 		this.secure = ribbon.isSecure();
 		this.followRedirects = ribbon.isFollowRedirects();
 		this.okToRetryOnAllOperations = ribbon.isOkToRetryOnAllOperations();
+		this.gzipPayload = ribbon.isGZipPayload(DEFAULT_GZIP_PAYLOAD);
 	}
 
 	protected abstract D createDelegate(IClientConfig config);

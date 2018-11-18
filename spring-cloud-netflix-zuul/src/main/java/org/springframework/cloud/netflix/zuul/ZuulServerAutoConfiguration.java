@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2017 the original author or authors.
+ * Copyright 2013-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.web.ServerProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -32,6 +33,8 @@ import org.springframework.boot.web.servlet.error.ErrorController;
 import org.springframework.cloud.client.actuator.HasFeatures;
 import org.springframework.cloud.client.discovery.event.HeartbeatEvent;
 import org.springframework.cloud.client.discovery.event.HeartbeatMonitor;
+import org.springframework.cloud.client.discovery.event.InstanceRegisteredEvent;
+import org.springframework.cloud.client.discovery.event.ParentHeartbeatEvent;
 import org.springframework.cloud.context.scope.refresh.RefreshScopeRefreshedEvent;
 import org.springframework.cloud.netflix.ribbon.SpringClientFactory;
 import org.springframework.cloud.netflix.zuul.filters.CompositeRouteLocator;
@@ -103,7 +106,7 @@ public class ZuulServerAutoConfiguration {
 	@Bean
 	@ConditionalOnMissingBean(SimpleRouteLocator.class)
 	public SimpleRouteLocator simpleRouteLocator() {
-		return new SimpleRouteLocator(this.server.getServlet().getServletPrefix(),
+		return new SimpleRouteLocator(this.server.getServlet().getContextPath(),
 				this.zuulProperties);
 	}
 
@@ -204,6 +207,7 @@ public class ZuulServerAutoConfiguration {
 
 		@Bean
 		@ConditionalOnBean(MeterRegistry.class)
+		@ConditionalOnMissingBean(CounterFactory.class)
 		public CounterFactory counterFactory(MeterRegistry meterRegistry) {
 			return new DefaultCounterFactory(meterRegistry);
 		}
@@ -213,6 +217,7 @@ public class ZuulServerAutoConfiguration {
 	protected static class ZuulMetricsConfiguration {
 
 		@Bean
+		@ConditionalOnMissingClass("io.micrometer.core.instrument.MeterRegistry")
 		@ConditionalOnMissingBean(CounterFactory.class)
 		public CounterFactory counterFactory() {
 			return new EmptyCounterFactory();
@@ -238,16 +243,28 @@ public class ZuulServerAutoConfiguration {
 		public void onApplicationEvent(ApplicationEvent event) {
 			if (event instanceof ContextRefreshedEvent
 					|| event instanceof RefreshScopeRefreshedEvent
-					|| event instanceof RoutesRefreshedEvent) {
-				this.zuulHandlerMapping.setDirty(true);
+					|| event instanceof RoutesRefreshedEvent
+					|| event instanceof InstanceRegisteredEvent) {
+				reset();
+			}
+			else if (event instanceof ParentHeartbeatEvent) {
+				ParentHeartbeatEvent e = (ParentHeartbeatEvent) event;
+				resetIfNeeded(e.getValue());
 			}
 			else if (event instanceof HeartbeatEvent) {
-				if (this.heartbeatMonitor.update(((HeartbeatEvent) event).getValue())) {
-					this.zuulHandlerMapping.setDirty(true);
-				}
+				HeartbeatEvent e = (HeartbeatEvent) event;
+				resetIfNeeded(e.getValue());
 			}
 		}
 
-	}
+		private void resetIfNeeded(Object value) {
+			if (this.heartbeatMonitor.update(value)) {
+				reset();
+			}
+		}
 
+		private void reset() {
+			this.zuulHandlerMapping.setDirty(true);
+		}
+	}
 }
